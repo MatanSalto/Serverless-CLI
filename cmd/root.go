@@ -4,6 +4,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"serverless-cli/cmd/run"
 )
 
 var (
@@ -27,4 +29,6 @@ func Execute() {
 func init() {
 	rootCmd.PersistentFlags().StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig file (if not provided, the default is $KUBECONFIG)")
 	rootCmd.PersistentFlags().StringVar(&namespace, "namespace", "serverless-python", "The Kubernetes namespace to run workloads in")
+
+	rootCmd.AddCommand(run.RunCmd)
 }
