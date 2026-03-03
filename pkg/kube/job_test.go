@@ -80,4 +80,41 @@ func TestCreateJob(t *testing.T) {
 			t.Error("CreateJob with empty image: want error, got nil")
 		}
 	})
+
+	t.Run("job with ConfigMap volume has volume and volume mount", func(t *testing.T) {
+		ctx := context.Background()
+		client := fake.NewSimpleClientset()
+		params := JobParams{
+			Namespace:      "default",
+			Name:           "job-with-cm",
+			Image:          "runner:latest",
+			ConfigMapName:  "my-source",
+			MountPath:      "/opt/code",
+			ConfigMapItems: []corev1.KeyToPath{{Key: "main.py", Path: "main.py"}, {Key: "src__greet.py", Path: "src/greet.py"}},
+		}
+		job, err := CreateJob(ctx, client, params)
+		if err != nil {
+			t.Fatalf("CreateJob: %v", err)
+		}
+		volumes := job.Spec.Template.Spec.Volumes
+		if len(volumes) != 1 {
+			t.Fatalf("len(Volumes) = %d, want 1", len(volumes))
+		}
+		if volumes[0].Name != "source-code" {
+			t.Errorf("volume Name = %q, want source-code", volumes[0].Name)
+		}
+		if volumes[0].ConfigMap == nil || volumes[0].ConfigMap.Name != "my-source" {
+			t.Errorf("volume ConfigMap = %v, want Name=my-source", volumes[0].ConfigMap)
+		}
+		if len(volumes[0].ConfigMap.Items) != 2 {
+			t.Errorf("ConfigMap.Items len = %d, want 2", len(volumes[0].ConfigMap.Items))
+		}
+		mounts := job.Spec.Template.Spec.Containers[0].VolumeMounts
+		if len(mounts) != 1 {
+			t.Fatalf("len(VolumeMounts) = %d, want 1", len(mounts))
+		}
+		if mounts[0].Name != "source-code" || mounts[0].MountPath != "/opt/code" {
+			t.Errorf("VolumeMount = %+v, want Name=source-code MountPath=/opt/code", mounts[0])
+		}
+	})
 }
