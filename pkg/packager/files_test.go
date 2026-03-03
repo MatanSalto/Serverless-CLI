@@ -21,8 +21,11 @@ func TestBuildFileMap(t *testing.T) {
 			t.Fatalf("len(data) = %d, want 1", len(data))
 		}
 		key := "foo.txt"
-		if data[key] != "hello" {
-			t.Errorf("data[%q] = %q, want %q", key, data[key], "hello")
+		if data[key].Content != "hello" {
+			t.Errorf("data[%q].Content = %q, want %q", key, data[key].Content, "hello")
+		}
+		if data[key].RelativePath != "foo.txt" {
+			t.Errorf("data[%q].RelativePath = %q, want %q", key, data[key].RelativePath, "foo.txt")
 		}
 	})
 
@@ -45,12 +48,18 @@ func TestBuildFileMap(t *testing.T) {
 		if len(data) != 2 {
 			t.Fatalf("len(data) = %d, want 2", len(data))
 		}
-		if data["top.txt"] != "top" {
-			t.Errorf("data[\"top.txt\"] = %q, want %q", data["top.txt"], "top")
+		if data["top.txt"].Content != "top" {
+			t.Errorf("data[\"top.txt\"].Content = %q, want %q", data["top.txt"].Content, "top")
+		}
+		if data["top.txt"].RelativePath != "top.txt" {
+			t.Errorf("data[\"top.txt\"].RelativePath = %q, want %q", data["top.txt"].RelativePath, "top.txt")
 		}
 		key := "a__b__nested.txt"
-		if data[key] != "nested" {
-			t.Errorf("data[%q] = %q, want %q", key, data[key], "nested")
+		if data[key].Content != "nested" {
+			t.Errorf("data[%q].Content = %q, want %q", key, data[key].Content, "nested")
+		}
+		if data[key].RelativePath != "a/b/nested.txt" {
+			t.Errorf("data[%q].RelativePath = %q, want %q", key, data[key].RelativePath, "a/b/nested.txt")
 		}
 	})
 
@@ -92,13 +101,16 @@ func TestBuildFileMap(t *testing.T) {
 		if _, ok := data[wantKey]; !ok {
 			t.Errorf("expected key %q in data; got keys: %v", wantKey, mapKeys(data))
 		}
-		if data[wantKey] != "x" {
-			t.Errorf("data[%q] = %q, want %q", wantKey, data[wantKey], "x")
+		if data[wantKey].Content != "x" {
+			t.Errorf("data[%q].Content = %q, want %q", wantKey, data[wantKey].Content, "x")
+		}
+		if data[wantKey].RelativePath != "dir/file.txt" {
+			t.Errorf("data[%q].RelativePath = %q, want %q", wantKey, data[wantKey].RelativePath, "dir/file.txt")
 		}
 	})
 }
 
-func mapKeys(m map[string]string) []string {
+func mapKeys(m map[string]FileEntry) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
