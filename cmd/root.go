@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"serverless-cli/cmd/list"
 	"serverless-cli/cmd/run"
 )
 
@@ -31,4 +32,5 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&namespace, "namespace", "serverless-python", "The Kubernetes namespace to run workloads in")
 
 	rootCmd.AddCommand(run.RunCmd)
+	rootCmd.AddCommand(list.ListCmd)
 }
