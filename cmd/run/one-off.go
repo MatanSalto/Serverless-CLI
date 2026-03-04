@@ -12,6 +12,7 @@ import (
 
 	"serverless-cli/pkg/kube"
 	"serverless-cli/pkg/runner"
+	"serverless-cli/pkg/utils"
 )
 
 var (
@@ -61,7 +62,7 @@ func runOneOff(cmd *cobra.Command, args []string) error {
 		// if the source path is a single file, use that filename as an entrypoint
 		if err == nil && info != nil && !info.IsDir() {
 			entrypoint = filepath.Base(sourcePath)
-		// otherwise, the source path is a directory, so we use the main.py file as an entrypoint
+			// otherwise, the source path is a directory, so we use the main.py file as an entrypoint
 		} else {
 			entrypoint = "main.py"
 		}
@@ -88,7 +89,12 @@ func runOneOff(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Job %q created in namespace %q. Source mounted at /opt/code, entrypoint %q.\n", jobName, namespace, entrypoint)
+	fmt.Printf("Job %q created in namespace %q. Streaming logs...\n", jobName, namespace)
+	jobLogWriter := utils.NewJobLogsWriter(os.Stdout)
+	if err := kube.StreamJobLogs(ctx, client, namespace, jobName, jobLogWriter); err != nil {
+		return fmt.Errorf("stream job logs: %w", err)
+	}
+	jobLogWriter.Reset()
 	return nil
 }
 
