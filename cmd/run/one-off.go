@@ -18,7 +18,6 @@ import (
 var (
 	oneOffEntrypoint string
 	oneOffName       string
-	oneOffImage      string
 )
 
 var OneOffCmd = &cobra.Command{
@@ -44,7 +43,7 @@ func runOneOff(cmd *cobra.Command, args []string) error {
 
 	namespace, err := cmd.Root().PersistentFlags().GetString("namespace")
 	if err != nil || namespace == "" {
-		namespace = "serverless-python"
+		namespace = "serverless-workloads"
 	}
 
 	client, err := kube.NewClientSet()
