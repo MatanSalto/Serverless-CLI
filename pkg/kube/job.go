@@ -3,10 +3,13 @@ package kube
 import (
 	"context"
 	"errors"
+	"io"
+	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -93,4 +96,72 @@ func CreateJob(ctx context.Context, client kubernetes.Interface, jobParams JobPa
 	}
 
 	return client.BatchV1().Jobs(jobParams.Namespace).Create(ctx, job, metav1.CreateOptions{})
+}
+
+// WaitForJob polls until the Job completes (Succeeded or Failed) or the context is done.
+func WaitForJob(ctx context.Context, client kubernetes.Interface, namespace, jobName string) error {
+	return wait.PollUntilContextCancel(ctx, 2*time.Second, true, func(ctx context.Context) (bool, error) {
+		job, err := client.BatchV1().Jobs(namespace).Get(ctx, jobName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		if job.Status.Succeeded >= 1 || job.Status.Failed >= 1 {
+			return true, nil
+		}
+		return false, nil
+	})
+}
+
+// GetJobLogs writes the logs of the Job's pod(s) to w. Uses the first pod found for the job.
+func GetJobLogs(ctx context.Context, client kubernetes.Interface, namespace, jobName string, w io.Writer) error {
+	podName, err := getJobPodName(ctx, client, namespace, jobName)
+	if err != nil || podName == "" {
+		return err
+	}
+	req := client.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{})
+	stream, err := req.Stream(ctx)
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+	_, err = io.Copy(w, stream)
+	return err
+}
+
+// getJobPodName waits for the job's pod to exist and returns its name.
+func getJobPodName(ctx context.Context, client kubernetes.Interface, namespace, jobName string) (string, error) {
+	var podName string
+	err := wait.PollUntilContextCancel(ctx, 2*time.Second, true, func(ctx context.Context) (bool, error) {
+		pods, err := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: "job-name=" + jobName,
+		})
+		if err != nil {
+			return false, err
+		}
+		if len(pods.Items) == 0 {
+			return false, nil
+		}
+		podName = pods.Items[0].Name
+		return true, nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return podName, nil
+}
+
+// StreamJobLogs waits for the job's pod, then streams its logs to w in real time until the pod exits.
+func StreamJobLogs(ctx context.Context, client kubernetes.Interface, namespace, jobName string, w io.Writer) error {
+	podName, err := getJobPodName(ctx, client, namespace, jobName)
+	if err != nil {
+		return err
+	}
+	req := client.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{Follow: true})
+	stream, err := req.Stream(ctx)
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+	_, err = io.Copy(w, stream)
+	return err
 }
