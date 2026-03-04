@@ -16,15 +16,15 @@ import (
 // Job represents a Kubernetes Job.
 type JobParams struct {
 	// Job name
-	Name      string
+	Name string
 	// Kubernetes namespace
 	Namespace string
 	// Container image
-	Image     string
+	Image string
 	// Command to run in the container
-	Command   []string
+	Command []string
 	// Arguments to pass to the command
-	Args      []string
+	Args []string
 	// Environment variables to set in the container
 	Env []corev1.EnvVar
 	// Name of the ConfigMap to mount as a volume
@@ -57,7 +57,7 @@ func CreateJob(ctx context.Context, client kubernetes.Interface, jobParams JobPa
 
 	podSpec := corev1.PodSpec{
 		RestartPolicy: corev1.RestartPolicyNever,
-		Containers:   []corev1.Container{container},
+		Containers:    []corev1.Container{container},
 	}
 
 	if jobParams.ConfigMapName != "" {
@@ -131,7 +131,9 @@ func GetJobLogs(ctx context.Context, client kubernetes.Interface, namespace, job
 // getJobPodName waits for the job's pod to exist and returns its name.
 func getJobPodName(ctx context.Context, client kubernetes.Interface, namespace, jobName string) (string, error) {
 	var podName string
+	// try running a function that checks the pod name until the cancellation of the context
 	err := wait.PollUntilContextCancel(ctx, 2*time.Second, true, func(ctx context.Context) (bool, error) {
+		// list only the pods that are associated with the current job
 		pods, err := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: "job-name=" + jobName,
 		})
