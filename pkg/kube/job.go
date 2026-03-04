@@ -87,6 +87,10 @@ func CreateJob(ctx context.Context, client kubernetes.Interface, jobParams JobPa
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobParams.Name,
 			Namespace: jobParams.Namespace,
+			Labels: map[string]string{
+				LabelManagedKey:      LabelManagedValue,
+				LabelWorkloadTypeKey: WorkloadTypeOneOff,
+			},
 		},
 		Spec: batchv1.JobSpec{
 			Template: corev1.PodTemplateSpec{
@@ -166,4 +170,16 @@ func StreamJobLogs(ctx context.Context, client kubernetes.Interface, namespace, 
 	defer stream.Close()
 	_, err = io.Copy(w, stream)
 	return err
+}
+
+// ListJobs returns all Jobs in the given namespace.
+func ListJobs(ctx context.Context, client kubernetes.Interface, namespace string) (*batchv1.JobList, error) {
+	return client.BatchV1().Jobs(namespace).List(ctx, metav1.ListOptions{})
+}
+
+// ListManagedJobs returns Jobs in the given namespace that were created by this CLI (have the managed label).
+func ListManagedJobs(ctx context.Context, client kubernetes.Interface, namespace string) (*batchv1.JobList, error) {
+	return client.BatchV1().Jobs(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: ManagedBySelector,
+	})
 }
