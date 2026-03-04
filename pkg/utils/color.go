@@ -18,7 +18,7 @@ type ColorWriter struct {
 }
 
 // NewDimCyanWriter returns a ColorWriter that writes to the io writer in dim cyan.
-func NewDimCyanWriter(w io.Writer) *ColorWriter {
+func NewJobLogsWriter(w io.Writer) *ColorWriter {
 	return &ColorWriter{w: w, prefix: ansiDimCyan, reset: ansiReset}
 }
 
