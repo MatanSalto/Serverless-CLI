@@ -183,3 +183,8 @@ func ListManagedJobs(ctx context.Context, client kubernetes.Interface, namespace
 		LabelSelector: ManagedBySelector,
 	})
 }
+
+// DeleteJob deletes a Job by name in the given namespace.
+func DeleteJob(ctx context.Context, client kubernetes.Interface, namespace, name string) error {
+	return client.BatchV1().Jobs(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+}

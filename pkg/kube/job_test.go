@@ -4,8 +4,10 @@ import (
 	"context"
 	"testing"
 
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -115,6 +117,30 @@ func TestCreateJob(t *testing.T) {
 		}
 		if mounts[0].Name != "source-code" || mounts[0].MountPath != "/opt/code" {
 			t.Errorf("VolumeMount = %+v, want Name=source-code MountPath=/opt/code", mounts[0])
+		}
+	})
+}
+
+func TestDeleteJob(t *testing.T) {
+	t.Run("job is deleted correctly", func(t *testing.T) {
+		ctx := context.Background()
+		client := fake.NewSimpleClientset(&batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "delete-me",
+				Namespace: "default",
+			},
+		})
+
+		if err := DeleteJob(ctx, client, "default", "delete-me"); err != nil {
+			t.Fatalf("DeleteJob: %v", err)
+		}
+
+		_, err := client.BatchV1().Jobs("default").Get(ctx, "delete-me", metav1.GetOptions{})
+		if err == nil {
+			t.Fatal("expected error getting deleted job, got nil")
+		}
+		if !apierrors.IsNotFound(err) {
+			t.Fatalf("expected not found error after deleting job, got %v", err)
 		}
 	})
 }
