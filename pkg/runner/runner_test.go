@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
@@ -82,4 +85,58 @@ func TestRunSource_exceedsSizeLimit(t *testing.T) {
 	if err == nil {
 		t.Fatal("RunSource: expected error for oversized source, got nil")
 	}
+}
+
+func TestCleanupSource(t *testing.T) {
+	t.Run("cleanup source", func(t *testing.T) {
+		ctx := context.Background()
+		client := fake.NewSimpleClientset(
+			&batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cleanup-job",
+					Namespace: "default",
+				},
+			},
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cleanup-job-source",
+					Namespace: "default",
+				},
+				Data: map[string]string{"main.py": "print(1)"},
+			},
+		)
+
+		if err := CleanupSource(ctx, client, "default", "cleanup-job"); err != nil {
+			t.Fatalf("CleanupSource: %v", err)
+		}
+
+		// Job should be gone
+		if _, err := client.BatchV1().Jobs("default").Get(ctx, "cleanup-job", metav1.GetOptions{}); err == nil {
+			t.Fatal("expected error getting deleted job, got nil")
+		} else if !apierrors.IsNotFound(err) {
+			t.Fatalf("expected not found error for job, got %v", err)
+		}
+
+		// ConfigMap should be gone
+		if _, err := client.CoreV1().ConfigMaps("default").Get(ctx, "cleanup-job-source", metav1.GetOptions{}); err == nil {
+			t.Fatal("expected error getting deleted configmap, got nil")
+		} else if !apierrors.IsNotFound(err) {
+			t.Fatalf("expected not found error for configmap, got %v", err)
+		}
+	})
+	t.Run("cleanup source with missing configmap is ignored", func(t *testing.T) {
+		ctx := context.Background()
+		client := fake.NewSimpleClientset(
+			&batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cleanup-job-no-cm",
+					Namespace: "default",
+				},
+			},
+		)
+
+		if err := CleanupSource(ctx, client, "default", "cleanup-job-no-cm"); err != nil {
+			t.Fatalf("CleanupSource (no configmap): %v", err)
+		}
+	})
 }

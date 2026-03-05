@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"serverless-cli/cmd/delete"
 	"serverless-cli/cmd/list"
 	"serverless-cli/cmd/run"
 )
@@ -33,4 +34,5 @@ func init() {
 
 	rootCmd.AddCommand(run.RunCmd)
 	rootCmd.AddCommand(list.ListCmd)
+	rootCmd.AddCommand(delete.DeleteCmd)
 }
