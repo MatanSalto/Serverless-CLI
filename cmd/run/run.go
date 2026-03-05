@@ -12,4 +12,5 @@ var RunCmd = &cobra.Command{
 
 func init() {
 	RunCmd.AddCommand(OneOffCmd)
+	RunCmd.AddCommand(AsyncCmd)
 }

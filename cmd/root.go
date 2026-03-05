@@ -7,6 +7,7 @@ import (
 
 	"serverless-cli/cmd/delete"
 	"serverless-cli/cmd/list"
+	"serverless-cli/cmd/logs"
 	"serverless-cli/cmd/run"
 )
 
@@ -30,9 +31,10 @@ func Execute() {
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig file (if not provided, the default is $KUBECONFIG)")
-	rootCmd.PersistentFlags().StringVar(&namespace, "namespace", "serverless-python", "The Kubernetes namespace to run workloads in")
+	rootCmd.PersistentFlags().StringVar(&namespace, "namespace", "serverless-workloads", "The Kubernetes namespace to run workloads in")
 
 	rootCmd.AddCommand(run.RunCmd)
 	rootCmd.AddCommand(list.ListCmd)
+	rootCmd.AddCommand(logs.LogsCmd)
 	rootCmd.AddCommand(delete.DeleteCmd)
 }
