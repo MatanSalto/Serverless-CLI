@@ -19,6 +19,9 @@ type JobParams struct {
 	Name string
 	// Kubernetes namespace
 	Namespace string
+	// WorkloadType indicates the kind of workload (one-off, async, cron, website).
+	// If empty, it defaults to WorkloadTypeOneOff.
+	WorkloadType string
 	// Container image
 	Image string
 	// Command to run in the container
@@ -83,13 +86,18 @@ func CreateJob(ctx context.Context, client kubernetes.Interface, jobParams JobPa
 		podSpec.Containers[0] = container
 	}
 
+	workloadType := jobParams.WorkloadType
+	if workloadType == "" {
+		workloadType = WorkloadTypeOneOff
+	}
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobParams.Name,
 			Namespace: jobParams.Namespace,
 			Labels: map[string]string{
 				LabelManagedKey:      LabelManagedValue,
-				LabelWorkloadTypeKey: WorkloadTypeOneOff,
+				LabelWorkloadTypeKey: workloadType,
 			},
 		},
 		Spec: batchv1.JobSpec{

@@ -23,6 +23,9 @@ type RunSourceParams struct {
 	RunnerImage string   // container image for the runner
 	Entrypoint  string   // script name to run (e.g. "main.py"), set as SLP_ENTRYPOINT
 	Args        []string // optional args passed to the job
+	// WorkloadType sets the workload-type label on the created Job.
+	// If empty, it defaults to kube.WorkloadTypeOneOff.
+	WorkloadType string
 }
 
 // RunSource packs the source into a filemap, creates a ConfigMap and a Job with a volume
@@ -70,11 +73,13 @@ func RunSource(ctx context.Context, client kubernetes.Interface, params RunSourc
 	// Create the runner job that runs the source code
 	items := packager.FileMapToVolumeItems(filesMap)
 	jobParams := kube.JobParams{
-		Name:          params.JobName,
-		Namespace:     params.Namespace,
-		Image:         params.RunnerImage,
+		Name:         params.JobName,
+		Namespace:    params.Namespace,
+		Image:        params.RunnerImage,
+		MountPath:    "/opt/code",
+		WorkloadType: params.WorkloadType,
+		// ConfigMapName refers to the ConfigMap that holds the source code
 		ConfigMapName: configMapName,
-		MountPath:     "/opt/code",
 		// We pass the configmap items in order to create the volume in the job
 		ConfigMapItems: items,
 		Env: []corev1.EnvVar{
