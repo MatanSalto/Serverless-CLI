@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
@@ -87,4 +88,41 @@ func TestCreateConfigMap(t *testing.T) {
 			t.Error("CreateConfigMap with empty name: want error, got nil")
 		}
 	})
+}
+
+func TestConfigMapHelpers(t *testing.T) {
+	t.Run("ConfigMapNameForWorkload returns expected name", func(t *testing.T) {
+		got := ConfigMapNameForWorkload("my-job")
+		want := "my-job-source"
+		if got != want {
+			t.Errorf("ConfigMapNameForWorkload(\"my-job\") = %q, want %q", got, want)
+		}
+	})
+}
+
+func TestDeleteConfigMap(t *testing.T) {
+	ctx := context.Background()
+	client := fake.NewSimpleClientset()
+	_, err := CreateConfigMap(ctx, client, ConfigMapParams{
+		Namespace: "default",
+		Name:      "delete-me",
+		Data: map[string]string{
+			"key": "value",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateConfigMap: %v", err)
+	}
+
+	if err := DeleteConfigMap(ctx, client, "default", "delete-me"); err != nil {
+		t.Fatalf("DeleteConfigMap: %v", err)
+	}
+
+	_, err = client.CoreV1().ConfigMaps("default").Get(ctx, "delete-me", metav1.GetOptions{})
+	if err == nil {
+		t.Fatal("expected error getting deleted configmap, got nil")
+	}
+	if !apierrors.IsNotFound(err) {
+		t.Fatalf("expected not found error after deleting configmap, got %v", err)
+	}
 }

@@ -38,3 +38,13 @@ func CreateConfigMap(ctx context.Context, client kubernetes.Interface, params Co
 
 	return client.CoreV1().ConfigMaps(params.Namespace).Create(ctx, cm, metav1.CreateOptions{})
 }
+
+// ConfigMapNameForWorkload returns the source ConfigMap name for a workload (e.g. "my-job" -> "my-job-source").
+func ConfigMapNameForWorkload(workloadName string) string {
+	return workloadName + "-source"
+}
+
+// DeleteConfigMap deletes a ConfigMap by name in the given namespace.
+func DeleteConfigMap(ctx context.Context, client kubernetes.Interface, namespace, name string) error {
+	return client.CoreV1().ConfigMaps(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+}
