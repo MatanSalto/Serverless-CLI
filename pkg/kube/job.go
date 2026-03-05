@@ -184,7 +184,10 @@ func ListManagedJobs(ctx context.Context, client kubernetes.Interface, namespace
 	})
 }
 
-// DeleteJob deletes a Job by name in the given namespace.
+// DeleteJob deletes a Job by name in the given namespace, cascading to its pods.
 func DeleteJob(ctx context.Context, client kubernetes.Interface, namespace, name string) error {
-	return client.BatchV1().Jobs(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	propagation := metav1.DeletePropagationForeground
+	return client.BatchV1().Jobs(namespace).Delete(ctx, name, metav1.DeleteOptions{
+		PropagationPolicy: &propagation,
+	})
 }
