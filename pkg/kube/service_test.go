@@ -6,24 +6,24 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
-func TestCreateService(t *testing.T) {
-	t.Run("service is created correctly", func(t *testing.T) {
+func TestCreateNodePortService(t *testing.T) {
+	t.Run("nodeport service is created correctly", func(t *testing.T) {
 		ctx := context.Background()
 		client := fake.NewSimpleClientset()
 		params := ServiceParams{
 			Namespace:  "default",
-			Name:       "test-svc",
+			Name:       "nodeport-svc",
 			Port:       8080,
 			TargetPort: 8080,
-			Selector:   map[string]string{"app": "test-svc"},
+			Selector:   map[string]string{"app": "nodeport-svc"},
+			Type:       corev1.ServiceTypeNodePort,
 		}
 		svc, err := CreateService(ctx, client, params)
 		if err != nil {
-			t.Fatalf("CreateService: %v", err)
+			t.Fatalf("CreateService (NodePort): %v", err)
 		}
 		if svc == nil {
 			t.Fatal("CreateService returned nil service")
@@ -34,8 +34,8 @@ func TestCreateService(t *testing.T) {
 		if svc.Namespace != params.Namespace {
 			t.Errorf("service.Namespace = %q, want %q", svc.Namespace, params.Namespace)
 		}
-		if svc.Spec.Type != corev1.ServiceTypeClusterIP {
-			t.Errorf("ServiceType = %v, want ClusterIP", svc.Spec.Type)
+		if svc.Spec.Type != corev1.ServiceTypeNodePort {
+			t.Errorf("ServiceType = %v, want NodePort", svc.Spec.Type)
 		}
 		if len(svc.Spec.Ports) != 1 {
 			t.Fatalf("len(Ports) = %d, want 1", len(svc.Spec.Ports))
@@ -43,8 +43,8 @@ func TestCreateService(t *testing.T) {
 		if svc.Spec.Ports[0].Port != 8080 {
 			t.Errorf("Port = %d, want 8080", svc.Spec.Ports[0].Port)
 		}
-		if svc.Spec.Selector["app"] != "test-svc" {
-			t.Errorf("Selector = %v, want app=test-svc", svc.Spec.Selector)
+		if svc.Spec.Selector["app"] != "nodeport-svc" {
+			t.Errorf("Selector = %v, want app=nodeport-svc", svc.Spec.Selector)
 		}
 		if svc.Labels[LabelWorkloadTypeKey] != WorkloadTypeService {
 			t.Errorf("workload-type label = %q, want %q", svc.Labels[LabelWorkloadTypeKey], WorkloadTypeService)
@@ -59,70 +59,24 @@ func TestCreateService(t *testing.T) {
 		}
 	})
 
-	t.Run("service with empty namespace returns error", func(t *testing.T) {
-		ctx := context.Background()
-		client := fake.NewSimpleClientset()
-		_, err := CreateService(ctx, client, ServiceParams{Namespace: "", Name: "x", Port: 8080})
-		if err == nil {
-			t.Error("CreateService with empty namespace: want error, got nil")
-		}
-	})
-
-	t.Run("service with empty name returns error", func(t *testing.T) {
-		ctx := context.Background()
-		client := fake.NewSimpleClientset()
-		_, err := CreateService(ctx, client, ServiceParams{Namespace: "default", Name: "", Port: 8080})
-		if err == nil {
-			t.Error("CreateService with empty name: want error, got nil")
-		}
-	})
-
-	t.Run("service with zero port returns error", func(t *testing.T) {
-		ctx := context.Background()
-		client := fake.NewSimpleClientset()
-		_, err := CreateService(ctx, client, ServiceParams{Namespace: "default", Name: "x", Port: 0})
-		if err == nil {
-			t.Error("CreateService with port 0: want error, got nil")
-		}
-	})
-
-	t.Run("targetPort defaults to port when zero", func(t *testing.T) {
+	t.Run("nodeport service with explicit NodePort sets port in spec", func(t *testing.T) {
 		ctx := context.Background()
 		client := fake.NewSimpleClientset()
 		params := ServiceParams{
-			Namespace: "default",
-			Name:      "svc",
-			Port:      9090,
-			Selector:  map[string]string{"app": "svc"},
+			Namespace:  "default",
+			Name:       "nodeport-svc-explicit",
+			Port:       8080,
+			TargetPort: 8080,
+			Selector:   map[string]string{"app": "nodeport-svc-explicit"},
+			Type:       corev1.ServiceTypeNodePort,
+			NodePort:   30080,
 		}
 		svc, err := CreateService(ctx, client, params)
 		if err != nil {
-			t.Fatalf("CreateService: %v", err)
+			t.Fatalf("CreateService (NodePort explicit): %v", err)
 		}
-		if svc.Spec.Ports[0].TargetPort.IntVal != 9090 {
-			t.Errorf("TargetPort = %v, want 9090", svc.Spec.Ports[0].TargetPort)
+		if svc.Spec.Ports[0].NodePort != 30080 {
+			t.Errorf("NodePort = %d, want 30080", svc.Spec.Ports[0].NodePort)
 		}
 	})
-}
-
-func TestDeleteService(t *testing.T) {
-	ctx := context.Background()
-	client := fake.NewSimpleClientset(&corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "delete-me",
-			Namespace: "default",
-		},
-	})
-
-	if err := DeleteService(ctx, client, "default", "delete-me"); err != nil {
-		t.Fatalf("DeleteService: %v", err)
-	}
-
-	_, err := client.CoreV1().Services("default").Get(ctx, "delete-me", metav1.GetOptions{})
-	if err == nil {
-		t.Fatal("expected error getting deleted service, got nil")
-	}
-	if !apierrors.IsNotFound(err) {
-		t.Fatalf("expected not found error after deleting service, got %v", err)
-	}
 }

@@ -17,6 +17,10 @@ type ServiceParams struct {
 	Port       int32
 	TargetPort int32
 	Selector   map[string]string // must match the Deployment's pod template labels (e.g. app=<name>)
+	// Type controls the Service type. If empty, defaults to ClusterIP.
+	Type corev1.ServiceType
+	// NodePort is used when Type is NodePort. If zero, Kubernetes will allocate one.
+	NodePort int32
 }
 
 // CreateService creates a ClusterIP Service in the cluster targeting pods with the given selector.
@@ -38,6 +42,21 @@ func CreateService(ctx context.Context, client kubernetes.Interface, params Serv
 		targetPort = params.Port
 	}
 
+	svcType := params.Type
+	if svcType == "" {
+		svcType = corev1.ServiceTypeClusterIP
+	}
+
+	servicePort := corev1.ServicePort{
+		Name:       "http",
+		Port:       params.Port,
+		TargetPort: intstr.FromInt32(targetPort),
+		Protocol:   corev1.ProtocolTCP,
+	}
+	if svcType == corev1.ServiceTypeNodePort && params.NodePort > 0 {
+		servicePort.NodePort = params.NodePort
+	}
+
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      params.Name,
@@ -48,16 +67,9 @@ func CreateService(ctx context.Context, client kubernetes.Interface, params Serv
 			},
 		},
 		Spec: corev1.ServiceSpec{
-			Type:     corev1.ServiceTypeClusterIP,
+			Type:     svcType,
 			Selector: params.Selector,
-			Ports: []corev1.ServicePort{
-				{
-					Name:       "http",
-					Port:       params.Port,
-					TargetPort: intstr.FromInt32(targetPort),
-					Protocol:   corev1.ProtocolTCP,
-				},
-			},
+			Ports: []corev1.ServicePort{servicePort},
 		},
 	}
 
