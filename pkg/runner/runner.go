@@ -28,6 +28,20 @@ type RunSourceParams struct {
 	WorkloadType string
 }
 
+// RunCronSourceParams holds parameters for running source code on a schedule using a CronJob.
+type RunCronSourceParams struct {
+	SourcePath  string   // path to source file or directory
+	Namespace   string   // Kubernetes namespace
+	CronJobName string   // name for the CronJob
+	Schedule    string   // cron schedule (e.g. "0 * * * *")
+	RunnerImage string   // container image for the runner
+	Entrypoint  string   // script name to run (e.g. "main.py"), set as SLP_ENTRYPOINT
+	Args        []string // optional args passed to the job
+	// WorkloadType sets the workload-type label on the created CronJob.
+	// If empty, it defaults to kube.WorkloadTypeCron.
+	WorkloadType string
+}
+
 // RunSource packs the source into a filemap, creates a ConfigMap and a Job with a volume
 // mount so the runner container sees the source at /opt/code.
 func RunSource(ctx context.Context, client kubernetes.Interface, params RunSourceParams) error {
@@ -94,6 +108,74 @@ func RunSource(ctx context.Context, client kubernetes.Interface, params RunSourc
 	return nil
 }
 
+// RunCronSource packs the source into a filemap, creates a ConfigMap and a CronJob with a volume
+// mount so the runner container sees the source at /opt/code.
+func RunCronSource(ctx context.Context, client kubernetes.Interface, params RunCronSourceParams) error {
+	if params.SourcePath == "" {
+		return errors.New("source path is required")
+	}
+	if params.Namespace == "" {
+		return errors.New("namespace is required")
+	}
+	if params.CronJobName == "" {
+		return errors.New("cronjob name is required")
+	}
+	if params.Schedule == "" {
+		return errors.New("schedule is required")
+	}
+	if params.RunnerImage == "" {
+		return errors.New("runner image is required")
+	}
+	if params.Entrypoint == "" {
+		return errors.New("entrypoint is required")
+	}
+
+	filesMap, err := packager.BuildFileMap(params.SourcePath)
+	if err != nil {
+		return fmt.Errorf("build file map: %w", err)
+	}
+
+	// Check if the source total size exceeds the ConfigMap limit
+	totalSize := packager.FileMapTotalSize(filesMap)
+	if totalSize > ConfigMapMaxSize {
+		return fmt.Errorf("source total size %d bytes exceeds ConfigMap limit (%d bytes)", totalSize, ConfigMapMaxSize)
+	}
+
+	// Create the configmap for the source code
+	configMapName := kube.ConfigMapNameForWorkload(params.CronJobName)
+	data := packager.FileMapToConfigData(filesMap)
+	_, err = kube.CreateConfigMap(ctx, client, kube.ConfigMapParams{
+		Name:      configMapName,
+		Namespace: params.Namespace,
+		Data:      data,
+	})
+	if err != nil {
+		return fmt.Errorf("create configmap: %w", err)
+	}
+
+	// Create the runner cronjob that runs the source code on a schedule
+	items := packager.FileMapToVolumeItems(filesMap)
+	cronParams := kube.CronJobParams{
+		Name:           params.CronJobName,
+		Namespace:      params.Namespace,
+		Schedule:       params.Schedule,
+		WorkloadType:   params.WorkloadType,
+		Image:          params.RunnerImage,
+		MountPath:      "/opt/code",
+		ConfigMapName:  configMapName,
+		ConfigMapItems: items,
+		Env: []corev1.EnvVar{
+			{Name: "SLP_ENTRYPOINT", Value: params.Entrypoint},
+		},
+		Args: params.Args,
+	}
+	_, err = kube.CreateCronJob(ctx, client, cronParams)
+	if err != nil {
+		return fmt.Errorf("create cronjob: %w", err)
+	}
+	return nil
+}
+
 // CleanupSource deletes the workload and its associated source ConfigMap created by RunSource.
 func CleanupSource(ctx context.Context, client kubernetes.Interface, namespace, jobName string) error {
 	if namespace == "" {
@@ -103,8 +185,18 @@ func CleanupSource(ctx context.Context, client kubernetes.Interface, namespace, 
 		return errors.New("job name is required")
 	}
 
+	// Try to delete a job first, if that doesn't exist, try to delete a CronJob with the same name
 	if err := kube.DeleteJob(ctx, client, namespace, jobName); err != nil {
-		return fmt.Errorf("delete job: %w", err)
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("delete job: %w", err)
+		}
+	}
+
+	// Also try deleting a CronJob with this name (for cron workloads).
+	if err := kube.DeleteCronJob(ctx, client, namespace, jobName); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("delete cronjob: %w", err)
+		}
 	}
 
 	configMapName := kube.ConfigMapNameForWorkload(jobName)
