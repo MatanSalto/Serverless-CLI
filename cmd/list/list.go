@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"serverless-cli/pkg/kube"
 )
@@ -50,8 +51,8 @@ func runList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	fmt.Printf("%-36s %-10s %-12s %s\n", "NAME", "TYPE", "STATUS", "AGE")
-	fmt.Println("--------------------------------------------------------------------------------")
+	fmt.Printf("%-36s %-10s %-12s %-10s %-20s %s\n", "NAME", "TYPE", "STATUS", "AGE", "SCHEDULE", "URL")
+	fmt.Println("------------------------------------------------------------------------------------------------------------")
 
 	// List Jobs (one-off, async, etc.)
 	for _, job := range jobList.Items {
@@ -69,7 +70,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		if !job.CreationTimestamp.IsZero() {
 			age = formatDuration(job.CreationTimestamp.Time)
 		}
-		fmt.Printf("%-36s %-10s %-12s %s\n", job.Name, workloadType, status, age)
+		fmt.Printf("%-36s %-10s %-12s %-10s %-20s %s\n", job.Name, workloadType, status, age, "—", "—")
 	}
 
 	// List CronJobs
@@ -86,7 +87,11 @@ func runList(cmd *cobra.Command, args []string) error {
 		if !cj.CreationTimestamp.IsZero() {
 			age = formatDuration(cj.CreationTimestamp.Time)
 		}
-		fmt.Printf("%-36s %-10s %-12s %s\n", cj.Name, workloadType, status, age)
+		schedule := "—"
+		if cj.Spec.Schedule != "" {
+			schedule = cj.Spec.Schedule
+		}
+		fmt.Printf("%-36s %-10s %-12s %-10s %-20s %s\n", cj.Name, workloadType, status, age, schedule, "—")
 	}
 
 	// List Deployments (services)
@@ -103,7 +108,13 @@ func runList(cmd *cobra.Command, args []string) error {
 		if !dep.CreationTimestamp.IsZero() {
 			age = formatDuration(dep.CreationTimestamp.Time)
 		}
-		fmt.Printf("%-36s %-10s %-12s %s\n", dep.Name, workloadType, status, age)
+		urlStr := "—"
+		if svc, err := client.CoreV1().Services(namespace).Get(ctx, dep.Name, metav1.GetOptions{}); err == nil {
+			if _, u := kube.NodePortServiceURL(ctx, client, svc); u != "" {
+				urlStr = u
+			}
+		}
+		fmt.Printf("%-36s %-10s %-12s %-10s %-20s %s\n", dep.Name, workloadType, status, age, "—", urlStr)
 	}
 	return nil
 }

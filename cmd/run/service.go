@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/kubernetes"
 
 	"serverless-cli/pkg/kube"
 	"serverless-cli/pkg/runner"
@@ -95,11 +93,11 @@ func runService(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Deployment %q and Service %q created in namespace %q.\n", name, name, namespace)
 
-	nodePort, url := describeNodePortService(ctx, client, namespace, svc)
+	nodePort, urlStr := kube.NodePortServiceURL(ctx, client, svc)
 	if nodePort > 0 {
 		fmt.Printf("Service is exposed on NodePort %d.\n", nodePort)
-		if url != "" {
-			fmt.Printf("You can access it at: %s\n", url)
+		if urlStr != "" {
+			fmt.Printf("You can access it at: %s\n", urlStr)
 		} else {
 			fmt.Printf("Use any cluster node IP with NodePort %d (e.g. http://<node-ip>:%d).\n", nodePort, nodePort)
 		}
@@ -108,22 +106,4 @@ func runService(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-// describeNodePortService inspects the created Service and builds a user-friendly URL using the kubeconfig API server host (public IP) when available, otherwise a node IP.
-func describeNodePortService(ctx context.Context, client kubernetes.Interface, namespace string, svc *corev1.Service) (int32, string) {
-	if svc == nil || len(svc.Spec.Ports) == 0 {
-		return 0, ""
-	}
-	p := svc.Spec.Ports[0]
-	if p.NodePort == 0 {
-		return 0, ""
-	}
-
-	// Prefer kubeconfig API server host (public IP) so the URL is reachable from outside the cluster.
-	host, _ := kube.APIServerHost()
-	if host == "" {
-		return p.NodePort, ""
-	}
-	return p.NodePort, fmt.Sprintf("http://%s:%d", host, p.NodePort)
 }
