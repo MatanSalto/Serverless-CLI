@@ -12,8 +12,8 @@ import (
 
 var DeleteCmd = &cobra.Command{
 	Use:   "delete <workload-name>",
-	Short: "Delete a workload Job and its source ConfigMap",
-	Long:  `Delete a workload Job by name from the cluster. Removes the Kubernetes Job and the ConfigMap that stores the source code.`,
+	Short: "Delete a workload and its source ConfigMap",
+	Long:  `Delete a workload (Job or CronJob) by name from the cluster. Removes the Kubernetes Job/CronJob and the ConfigMap that stores the source code.`,
 	Args:  cobra.ExactArgs(1),
 	RunE:  runDelete,
 }
@@ -36,6 +36,6 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Printf("Deleted Job %q and ConfigMap %q from namespace %q.\n", workloadName, kube.ConfigMapNameForWorkload(workloadName), namespace)
+	fmt.Printf("Deleted workload %q and ConfigMap %q from namespace %q.\n", workloadName, kube.ConfigMapNameForWorkload(workloadName), namespace)
 	return nil
 }

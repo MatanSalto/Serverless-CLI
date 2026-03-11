@@ -35,13 +35,20 @@ func runList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("list jobs: %w", err)
 	}
 
-	if len(jobList.Items) == 0 {
+	cronJobList, err := kube.ListManagedCronJobs(ctx, client, namespace)
+	if err != nil {
+		return fmt.Errorf("list cronjobs: %w", err)
+	}
+
+	if len(jobList.Items) == 0 && len(cronJobList.Items) == 0 {
 		fmt.Printf("No workloads in namespace %q.\n", namespace)
 		return nil
 	}
 
 	fmt.Printf("%-36s %-10s %-12s %s\n", "NAME", "TYPE", "STATUS", "AGE")
 	fmt.Println("--------------------------------------------------------------------------------")
+
+	// List Jobs (one-off, async, etc.)
 	for _, job := range jobList.Items {
 		workloadType := job.Labels[kube.LabelWorkloadTypeKey]
 		if workloadType == "" {
@@ -58,6 +65,23 @@ func runList(cmd *cobra.Command, args []string) error {
 			age = formatDuration(job.CreationTimestamp.Time)
 		}
 		fmt.Printf("%-36s %-10s %-12s %s\n", job.Name, workloadType, status, age)
+	}
+
+	// List CronJobs
+	for _, cj := range cronJobList.Items {
+		workloadType := cj.Labels[kube.LabelWorkloadTypeKey]
+		if workloadType == "" {
+			workloadType = kube.WorkloadTypeCron
+		}
+		status := "Scheduled"
+		if cj.Spec.Suspend != nil && *cj.Spec.Suspend {
+			status = "Suspended"
+		}
+		age := "—"
+		if !cj.CreationTimestamp.IsZero() {
+			age = formatDuration(cj.CreationTimestamp.Time)
+		}
+		fmt.Printf("%-36s %-10s %-12s %s\n", cj.Name, workloadType, status, age)
 	}
 	return nil
 }
