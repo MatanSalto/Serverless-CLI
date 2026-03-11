@@ -42,6 +42,18 @@ type RunCronSourceParams struct {
 	WorkloadType string
 }
 
+// RunServiceSourceParams holds parameters for running source code as a long-running service (Deployment + Service).
+type RunServiceSourceParams struct {
+	SourcePath    string   // path to source file or directory
+	Namespace     string   // Kubernetes namespace
+	ServiceName   string   // name for the Deployment and Service
+	RunnerImage   string   // container image for the runner
+	Entrypoint    string   // script name to run (e.g. "main.py"), set as SLP_ENTRYPOINT
+	Port          int32    // container port the app listens on (e.g. 8080)
+	Args          []string // optional args passed to the container
+	WorkloadType  string   // if empty, defaults to kube.WorkloadTypeService
+}
+
 // RunSource packs the source into a filemap, creates a ConfigMap and a Job with a volume
 // mount so the runner container sees the source at /opt/code.
 func RunSource(ctx context.Context, client kubernetes.Interface, params RunSourceParams) error {
@@ -176,6 +188,91 @@ func RunCronSource(ctx context.Context, client kubernetes.Interface, params RunC
 	return nil
 }
 
+// RunServiceSource packs the source into a filemap, creates a ConfigMap, a Deployment, and a Service
+// so the runner container runs long-running and is exposed on the given port.
+// It returns the created Service object.
+func RunServiceSource(ctx context.Context, client kubernetes.Interface, params RunServiceSourceParams) (*corev1.Service, error) {
+	if params.SourcePath == "" {
+		return nil, errors.New("source path is required")
+	}
+	if params.Namespace == "" {
+		return nil, errors.New("namespace is required")
+	}
+	if params.ServiceName == "" {
+		return nil, errors.New("service name is required")
+	}
+	if params.RunnerImage == "" {
+		return nil, errors.New("runner image is required")
+	}
+	if params.Entrypoint == "" {
+		return nil, errors.New("entrypoint is required")
+	}
+	if params.Port <= 0 {
+		return nil, errors.New("port must be positive")
+	}
+
+	filesMap, err := packager.BuildFileMap(params.SourcePath)
+	if err != nil {
+		return nil, fmt.Errorf("build file map: %w", err)
+	}
+	totalSize := packager.FileMapTotalSize(filesMap)
+	if totalSize > ConfigMapMaxSize {
+		return nil, fmt.Errorf("source total size %d bytes exceeds ConfigMap limit (%d bytes)", totalSize, ConfigMapMaxSize)
+	}
+
+	configMapName := kube.ConfigMapNameForWorkload(params.ServiceName)
+	data := packager.FileMapToConfigData(filesMap)
+	_, err = kube.CreateConfigMap(ctx, client, kube.ConfigMapParams{
+		Name:      configMapName,
+		Namespace: params.Namespace,
+		Data:      data,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create configmap: %w", err)
+	}
+
+	items := packager.FileMapToVolumeItems(filesMap)
+	workloadType := params.WorkloadType
+	if workloadType == "" {
+		workloadType = kube.WorkloadTypeService
+	}
+	portStr := fmt.Sprintf("%d", params.Port)
+	depParams := kube.DeploymentParams{
+		Name:            params.ServiceName,
+		Namespace:       params.Namespace,
+		WorkloadType:    workloadType,
+		Image:           params.RunnerImage,
+		ContainerPort:   params.Port,
+		MountPath:       "/opt/code",
+		ConfigMapName:   configMapName,
+		ConfigMapItems:  items,
+		Env: []corev1.EnvVar{
+			{Name: "SLP_ENTRYPOINT", Value: params.Entrypoint},
+			{Name: "SLP_PORT", Value: portStr},
+		},
+		Args:            params.Args,
+		PodLabelAppName: params.ServiceName,
+	}
+	_, err = kube.CreateDeployment(ctx, client, depParams)
+	if err != nil {
+		return nil, fmt.Errorf("create deployment: %w", err)
+	}
+
+	svcParams := kube.ServiceParams{
+		Name:       params.ServiceName,
+		Namespace:  params.Namespace,
+		Port:       params.Port,
+		TargetPort: params.Port,
+		Selector:   map[string]string{"app": params.ServiceName},
+		Type:       corev1.ServiceTypeNodePort,
+	}
+	svc, err := kube.CreateService(ctx, client, svcParams)
+	if err != nil {
+		return nil, fmt.Errorf("create service: %w", err)
+	}
+	return svc, nil
+}
+
 // CleanupSource deletes the workload and its associated source ConfigMap created by RunSource.
 func CleanupSource(ctx context.Context, client kubernetes.Interface, namespace, jobName string) error {
 	if namespace == "" {
@@ -196,6 +293,18 @@ func CleanupSource(ctx context.Context, client kubernetes.Interface, namespace, 
 	if err := kube.DeleteCronJob(ctx, client, namespace, jobName); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return fmt.Errorf("delete cronjob: %w", err)
+		}
+	}
+
+	// Also try deleting a Deployment and Service with this name (for service workloads).
+	if err := kube.DeleteDeployment(ctx, client, namespace, jobName); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("delete deployment: %w", err)
+		}
+	}
+	if err := kube.DeleteService(ctx, client, namespace, jobName); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("delete service: %w", err)
 		}
 	}
 
