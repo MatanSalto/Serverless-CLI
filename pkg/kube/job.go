@@ -170,6 +170,11 @@ func StreamJobLogs(ctx context.Context, client kubernetes.Interface, namespace, 
 	if err != nil {
 		return err
 	}
+	return StreamPodLogs(ctx, client, namespace, podName, w)
+}
+
+// StreamPodLogs streams the given pod's logs to w in real time (Follow: true).
+func StreamPodLogs(ctx context.Context, client kubernetes.Interface, namespace, podName string, w io.Writer) error {
 	req := client.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{Follow: true})
 	stream, err := req.Stream(ctx)
 	if err != nil {
