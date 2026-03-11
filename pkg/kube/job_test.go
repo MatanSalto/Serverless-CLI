@@ -6,8 +6,8 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -55,7 +55,7 @@ func TestCreateJob(t *testing.T) {
 			t.Errorf("retrieved job UID does not match created job")
 		}
 	})
-	
+
 	t.Run("job with empty namespace is not created and throws exception", func(t *testing.T) {
 		ctx := context.Background()
 		client := fake.NewSimpleClientset()

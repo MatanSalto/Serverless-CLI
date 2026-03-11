@@ -14,4 +14,5 @@ func init() {
 	RunCmd.AddCommand(OneOffCmd)
 	RunCmd.AddCommand(AsyncCmd)
 	RunCmd.AddCommand(CronCmd)
+	RunCmd.AddCommand(ServiceCmd)
 }

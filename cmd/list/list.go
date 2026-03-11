@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"serverless-cli/pkg/kube"
 )
@@ -40,13 +41,18 @@ func runList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("list cronjobs: %w", err)
 	}
 
-	if len(jobList.Items) == 0 && len(cronJobList.Items) == 0 {
+	deployList, err := kube.ListManagedDeployments(ctx, client, namespace)
+	if err != nil {
+		return fmt.Errorf("list deployments: %w", err)
+	}
+
+	if len(jobList.Items) == 0 && len(cronJobList.Items) == 0 && len(deployList.Items) == 0 {
 		fmt.Printf("No workloads in namespace %q.\n", namespace)
 		return nil
 	}
 
-	fmt.Printf("%-36s %-10s %-12s %s\n", "NAME", "TYPE", "STATUS", "AGE")
-	fmt.Println("--------------------------------------------------------------------------------")
+	fmt.Printf("%-36s %-10s %-12s %-10s %-20s %s\n", "NAME", "TYPE", "STATUS", "AGE", "SCHEDULE", "URL")
+	fmt.Println("------------------------------------------------------------------------------------------------------------")
 
 	// List Jobs (one-off, async, etc.)
 	for _, job := range jobList.Items {
@@ -64,7 +70,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		if !job.CreationTimestamp.IsZero() {
 			age = formatDuration(job.CreationTimestamp.Time)
 		}
-		fmt.Printf("%-36s %-10s %-12s %s\n", job.Name, workloadType, status, age)
+		fmt.Printf("%-36s %-10s %-12s %-10s %-20s %s\n", job.Name, workloadType, status, age, "—", "—")
 	}
 
 	// List CronJobs
@@ -81,7 +87,34 @@ func runList(cmd *cobra.Command, args []string) error {
 		if !cj.CreationTimestamp.IsZero() {
 			age = formatDuration(cj.CreationTimestamp.Time)
 		}
-		fmt.Printf("%-36s %-10s %-12s %s\n", cj.Name, workloadType, status, age)
+		schedule := "—"
+		if cj.Spec.Schedule != "" {
+			schedule = cj.Spec.Schedule
+		}
+		fmt.Printf("%-36s %-10s %-12s %-10s %-20s %s\n", cj.Name, workloadType, status, age, schedule, "—")
+	}
+
+	// List Deployments (services)
+	for _, dep := range deployList.Items {
+		workloadType := dep.Labels[kube.LabelWorkloadTypeKey]
+		if workloadType == "" {
+			workloadType = kube.WorkloadTypeService
+		}
+		status := "Running"
+		if dep.Status.ReadyReplicas < 1 && dep.Status.UpdatedReplicas < 1 {
+			status = "Pending"
+		}
+		age := "—"
+		if !dep.CreationTimestamp.IsZero() {
+			age = formatDuration(dep.CreationTimestamp.Time)
+		}
+		urlStr := "—"
+		if svc, err := client.CoreV1().Services(namespace).Get(ctx, dep.Name, metav1.GetOptions{}); err == nil {
+			if _, u := kube.NodePortServiceURL(ctx, client, svc); u != "" {
+				urlStr = u
+			}
+		}
+		fmt.Printf("%-36s %-10s %-12s %-10s %-20s %s\n", dep.Name, workloadType, status, age, "—", urlStr)
 	}
 	return nil
 }

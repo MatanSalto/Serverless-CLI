@@ -18,7 +18,7 @@ import (
 var LogsCmd = &cobra.Command{
 	Use:   "logs <workload-name>",
 	Short: "View logs of a workload",
-	Long:  `Stream logs from a workload (Job) by name. For running jobs, logs stream until the job completes. For completed jobs, prints the existing logs and exits.`,
+	Long:  `Stream logs from a workload (Job, CronJob, or Service/Deployment) by name. For jobs, logs stream until the job completes. For services, streams logs from one of the deployment's pods.`,
 	Args:  cobra.ExactArgs(1),
 	RunE:  runLogs,
 }
@@ -51,11 +51,28 @@ func runLogs(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("get job: %w", err)
 	}
 
-	// If not a Job, check if it's a CronJob and stream logs from its most recent Job.
+	// If not a Job, check if it's a Deployment (service) and stream logs from one of its pods.
+	if _, err := client.AppsV1().Deployments(namespace).Get(ctx, workloadName, metav1.GetOptions{}); err == nil {
+		podName, err := kube.GetFirstRunningPodNameForDeployment(ctx, client, namespace, workloadName)
+		if err != nil {
+			return fmt.Errorf("get pod for deployment: %w", err)
+		}
+		if podName == "" {
+			return fmt.Errorf("deployment %q has no running pods yet", workloadName)
+		}
+		if err := kube.StreamPodLogs(ctx, client, namespace, podName, jobLogWriter); err != nil {
+			return fmt.Errorf("stream logs: %w", err)
+		}
+		return nil
+	} else if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("get deployment: %w", err)
+	}
+
+	// If not a Deployment, check if it's a CronJob and stream logs from its most recent Job.
 	cronJob, err := client.BatchV1().CronJobs(namespace).Get(ctx, workloadName, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return fmt.Errorf("workload %q not found as Job or CronJob in namespace %q", workloadName, namespace)
+			return fmt.Errorf("workload %q not found as Job, CronJob, or Deployment in namespace %q", workloadName, namespace)
 		}
 		return fmt.Errorf("get cronjob: %w", err)
 	}
