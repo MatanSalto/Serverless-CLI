@@ -40,7 +40,12 @@ func runList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("list cronjobs: %w", err)
 	}
 
-	if len(jobList.Items) == 0 && len(cronJobList.Items) == 0 {
+	deployList, err := kube.ListManagedDeployments(ctx, client, namespace)
+	if err != nil {
+		return fmt.Errorf("list deployments: %w", err)
+	}
+
+	if len(jobList.Items) == 0 && len(cronJobList.Items) == 0 && len(deployList.Items) == 0 {
 		fmt.Printf("No workloads in namespace %q.\n", namespace)
 		return nil
 	}
@@ -82,6 +87,23 @@ func runList(cmd *cobra.Command, args []string) error {
 			age = formatDuration(cj.CreationTimestamp.Time)
 		}
 		fmt.Printf("%-36s %-10s %-12s %s\n", cj.Name, workloadType, status, age)
+	}
+
+	// List Deployments (services)
+	for _, dep := range deployList.Items {
+		workloadType := dep.Labels[kube.LabelWorkloadTypeKey]
+		if workloadType == "" {
+			workloadType = kube.WorkloadTypeService
+		}
+		status := "Running"
+		if dep.Status.ReadyReplicas < 1 && dep.Status.UpdatedReplicas < 1 {
+			status = "Pending"
+		}
+		age := "—"
+		if !dep.CreationTimestamp.IsZero() {
+			age = formatDuration(dep.CreationTimestamp.Time)
+		}
+		fmt.Printf("%-36s %-10s %-12s %s\n", dep.Name, workloadType, status, age)
 	}
 	return nil
 }
