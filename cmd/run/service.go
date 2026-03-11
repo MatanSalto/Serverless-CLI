@@ -6,9 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"github.com/spf13/cobra"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 
 	"serverless-cli/pkg/kube"
@@ -16,9 +15,9 @@ import (
 )
 
 var (
-	serviceEntrypoint  string
-	serviceName        string
-	servicePort        int
+	serviceEntrypoint string
+	serviceName       string
+	servicePort       int
 )
 
 var ServiceCmd = &cobra.Command{
@@ -111,7 +110,7 @@ func runService(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// describeNodePortService inspects the created Service and cluster nodes to build a user-friendly URL.
+// describeNodePortService inspects the created Service and builds a user-friendly URL using the kubeconfig API server host (public IP) when available, otherwise a node IP.
 func describeNodePortService(ctx context.Context, client kubernetes.Interface, namespace string, svc *corev1.Service) (int32, string) {
 	if svc == nil || len(svc.Spec.Ports) == 0 {
 		return 0, ""
@@ -121,26 +120,8 @@ func describeNodePortService(ctx context.Context, client kubernetes.Interface, n
 		return 0, ""
 	}
 
-	nodes, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	if err != nil || len(nodes.Items) == 0 {
-		return p.NodePort, ""
-	}
-
-	var host string
-	for _, addr := range nodes.Items[0].Status.Addresses {
-		if addr.Type == corev1.NodeExternalIP {
-			host = addr.Address
-			break
-		}
-	}
-	if host == "" {
-		for _, addr := range nodes.Items[0].Status.Addresses {
-			if addr.Type == corev1.NodeInternalIP {
-				host = addr.Address
-				break
-			}
-		}
-	}
+	// Prefer kubeconfig API server host (public IP) so the URL is reachable from outside the cluster.
+	host, _ := kube.APIServerHost()
 	if host == "" {
 		return p.NodePort, ""
 	}
