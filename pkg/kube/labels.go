@@ -16,6 +16,7 @@ const (
 	WorkloadTypeAsync    = "async"
 	WorkloadTypeCron     = "cron"
 	WorkloadTypeWebsite  = "website"
+	WorkloadTypeService  = "service"
 )
 
 // ManagedBySelector is a label selector that matches any resource created by this CLI.
