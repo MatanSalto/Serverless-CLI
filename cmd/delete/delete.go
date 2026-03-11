@@ -13,7 +13,7 @@ import (
 var DeleteCmd = &cobra.Command{
 	Use:   "delete <workload-name>",
 	Short: "Delete a workload and its source ConfigMap",
-	Long:  `Delete a workload (Job or CronJob) by name from the cluster. Removes the Kubernetes Job/CronJob and the ConfigMap that stores the source code.`,
+	Long:  `Delete a workload (Job, CronJob, or Service/Deployment) by name from the cluster. Removes the Kubernetes resource and the ConfigMap that stores the source code.`,
 	Args:  cobra.ExactArgs(1),
 	RunE:  runDelete,
 }
