@@ -1,8 +1,10 @@
 package kube
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -35,4 +37,29 @@ func restConfig() (*rest.Config, error) {
 		kubeconfig = filepath.Join(os.Getenv("HOME"), ".kube", "config")
 	}
 	return clientcmd.BuildConfigFromFlags("", kubeconfig)
+}
+
+// APIServerHost returns the host (IP or hostname) from the kubeconfig API server URL,
+// so service URLs can use the same address used to reach the cluster (e.g. public IP).
+func APIServerHost() (string, error) {
+	config, err := NewRestConfig()
+	if err != nil || config == nil || config.Host == "" {
+		return "", err
+	}
+	host := strings.TrimSpace(config.Host)
+	if host == "" {
+		return "", nil
+	}
+	if !strings.Contains(host, "://") {
+		host = "https://" + host
+	}
+	u, err := url.Parse(host)
+	if err != nil {
+		return "", err
+	}
+	h := u.Hostname()
+	if h == "" {
+		h = u.Host
+	}
+	return h, nil
 }
