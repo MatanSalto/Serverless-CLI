@@ -2,13 +2,13 @@ package runner
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
 
+	serr "serverless-cli/internal/errors"
 	"serverless-cli/pkg/kube"
 	"serverless-cli/pkg/packager"
 )
@@ -58,19 +58,19 @@ type RunServiceSourceParams struct {
 // mount so the runner container sees the source at /opt/code.
 func RunSource(ctx context.Context, client kubernetes.Interface, params RunSourceParams) error {
 	if params.SourcePath == "" {
-		return errors.New("source path is required")
+		return serr.ValidationError{Field: "source path", Reason: "required"}
 	}
 	if params.Namespace == "" {
-		return errors.New("namespace is required")
+		return serr.ValidationError{Field: "namespace", Reason: "required"}
 	}
 	if params.JobName == "" {
-		return errors.New("job name is required")
+		return serr.ValidationError{Field: "job name", Reason: "required"}
 	}
 	if params.RunnerImage == "" {
-		return errors.New("runner image is required")
+		return serr.ValidationError{Field: "runner image", Reason: "required"}
 	}
 	if params.Entrypoint == "" {
-		return errors.New("entrypoint is required")
+		return serr.ValidationError{Field: "entrypoint", Reason: "required"}
 	}
 
 	filesMap, err := packager.BuildFileMap(params.SourcePath)
@@ -81,7 +81,11 @@ func RunSource(ctx context.Context, client kubernetes.Interface, params RunSourc
 	// Check if the source total size exceeds the ConfigMap limit
 	totalSize := packager.FileMapTotalSize(filesMap)
 	if totalSize > ConfigMapMaxSize {
-		return fmt.Errorf("source total size %d bytes exceeds ConfigMap limit (%d bytes)", totalSize, ConfigMapMaxSize)
+		return serr.SizeLimitError{
+			Resource:    "ConfigMap",
+			ActualBytes: totalSize,
+			LimitBytes:  ConfigMapMaxSize,
+		}
 	}
 
 	// Create the configmap for the source code
@@ -93,7 +97,13 @@ func RunSource(ctx context.Context, client kubernetes.Interface, params RunSourc
 		Data:      data,
 	})
 	if err != nil {
-		return fmt.Errorf("create configmap: %w", err)
+		return serr.KubeOpError{
+			Op:        "create",
+			Resource:  "ConfigMap",
+			Name:      configMapName,
+			Namespace: params.Namespace,
+			Err:       err,
+		}
 	}
 
 	// Create the runner job that runs the source code
@@ -115,7 +125,13 @@ func RunSource(ctx context.Context, client kubernetes.Interface, params RunSourc
 	}
 	_, err = kube.CreateJob(ctx, client, jobParams)
 	if err != nil {
-		return fmt.Errorf("create job: %w", err)
+		return serr.KubeOpError{
+			Op:        "create",
+			Resource:  "Job",
+			Name:      params.JobName,
+			Namespace: params.Namespace,
+			Err:       err,
+		}
 	}
 	return nil
 }
@@ -124,22 +140,22 @@ func RunSource(ctx context.Context, client kubernetes.Interface, params RunSourc
 // mount so the runner container sees the source at /opt/code.
 func RunCronSource(ctx context.Context, client kubernetes.Interface, params RunCronSourceParams) error {
 	if params.SourcePath == "" {
-		return errors.New("source path is required")
+		return serr.ValidationError{Field: "source path", Reason: "required"}
 	}
 	if params.Namespace == "" {
-		return errors.New("namespace is required")
+		return serr.ValidationError{Field: "namespace", Reason: "required"}
 	}
 	if params.CronJobName == "" {
-		return errors.New("cronjob name is required")
+		return serr.ValidationError{Field: "cronjob name", Reason: "required"}
 	}
 	if params.Schedule == "" {
-		return errors.New("schedule is required")
+		return serr.ValidationError{Field: "schedule", Reason: "required"}
 	}
 	if params.RunnerImage == "" {
-		return errors.New("runner image is required")
+		return serr.ValidationError{Field: "runner image", Reason: "required"}
 	}
 	if params.Entrypoint == "" {
-		return errors.New("entrypoint is required")
+		return serr.ValidationError{Field: "entrypoint", Reason: "required"}
 	}
 
 	filesMap, err := packager.BuildFileMap(params.SourcePath)
@@ -150,7 +166,11 @@ func RunCronSource(ctx context.Context, client kubernetes.Interface, params RunC
 	// Check if the source total size exceeds the ConfigMap limit
 	totalSize := packager.FileMapTotalSize(filesMap)
 	if totalSize > ConfigMapMaxSize {
-		return fmt.Errorf("source total size %d bytes exceeds ConfigMap limit (%d bytes)", totalSize, ConfigMapMaxSize)
+		return serr.SizeLimitError{
+			Resource:    "ConfigMap",
+			ActualBytes: totalSize,
+			LimitBytes:  ConfigMapMaxSize,
+		}
 	}
 
 	// Create the configmap for the source code
@@ -162,7 +182,13 @@ func RunCronSource(ctx context.Context, client kubernetes.Interface, params RunC
 		Data:      data,
 	})
 	if err != nil {
-		return fmt.Errorf("create configmap: %w", err)
+		return serr.KubeOpError{
+			Op:        "create",
+			Resource:  "ConfigMap",
+			Name:      configMapName,
+			Namespace: params.Namespace,
+			Err:       err,
+		}
 	}
 
 	// Create the runner cronjob that runs the source code on a schedule
@@ -183,7 +209,13 @@ func RunCronSource(ctx context.Context, client kubernetes.Interface, params RunC
 	}
 	_, err = kube.CreateCronJob(ctx, client, cronParams)
 	if err != nil {
-		return fmt.Errorf("create cronjob: %w", err)
+		return serr.KubeOpError{
+			Op:        "create",
+			Resource:  "CronJob",
+			Name:      params.CronJobName,
+			Namespace: params.Namespace,
+			Err:       err,
+		}
 	}
 	return nil
 }
@@ -193,22 +225,22 @@ func RunCronSource(ctx context.Context, client kubernetes.Interface, params RunC
 // It returns the created Service object.
 func RunServiceSource(ctx context.Context, client kubernetes.Interface, params RunServiceSourceParams) (*corev1.Service, error) {
 	if params.SourcePath == "" {
-		return nil, errors.New("source path is required")
+		return nil, serr.ValidationError{Field: "source path", Reason: "required"}
 	}
 	if params.Namespace == "" {
-		return nil, errors.New("namespace is required")
+		return nil, serr.ValidationError{Field: "namespace", Reason: "required"}
 	}
 	if params.ServiceName == "" {
-		return nil, errors.New("service name is required")
+		return nil, serr.ValidationError{Field: "service name", Reason: "required"}
 	}
 	if params.RunnerImage == "" {
-		return nil, errors.New("runner image is required")
+		return nil, serr.ValidationError{Field: "runner image", Reason: "required"}
 	}
 	if params.Entrypoint == "" {
-		return nil, errors.New("entrypoint is required")
+		return nil, serr.ValidationError{Field: "entrypoint", Reason: "required"}
 	}
 	if params.Port <= 0 {
-		return nil, errors.New("port must be positive")
+		return nil, serr.ValidationError{Field: "port", Reason: "must be positive"}
 	}
 
 	filesMap, err := packager.BuildFileMap(params.SourcePath)
@@ -217,7 +249,11 @@ func RunServiceSource(ctx context.Context, client kubernetes.Interface, params R
 	}
 	totalSize := packager.FileMapTotalSize(filesMap)
 	if totalSize > ConfigMapMaxSize {
-		return nil, fmt.Errorf("source total size %d bytes exceeds ConfigMap limit (%d bytes)", totalSize, ConfigMapMaxSize)
+		return nil, serr.SizeLimitError{
+			Resource:    "ConfigMap",
+			ActualBytes: totalSize,
+			LimitBytes:  ConfigMapMaxSize,
+		}
 	}
 
 	configMapName := kube.ConfigMapNameForWorkload(params.ServiceName)
@@ -228,7 +264,13 @@ func RunServiceSource(ctx context.Context, client kubernetes.Interface, params R
 		Data:      data,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create configmap: %w", err)
+		return nil, serr.KubeOpError{
+			Op:        "create",
+			Resource:  "ConfigMap",
+			Name:      configMapName,
+			Namespace: params.Namespace,
+			Err:       err,
+		}
 	}
 
 	items := packager.FileMapToVolumeItems(filesMap)
@@ -255,7 +297,13 @@ func RunServiceSource(ctx context.Context, client kubernetes.Interface, params R
 	}
 	_, err = kube.CreateDeployment(ctx, client, depParams)
 	if err != nil {
-		return nil, fmt.Errorf("create deployment: %w", err)
+		return nil, serr.KubeOpError{
+			Op:        "create",
+			Resource:  "Deployment",
+			Name:      params.ServiceName,
+			Namespace: params.Namespace,
+			Err:       err,
+		}
 	}
 
 	svcParams := kube.ServiceParams{
@@ -268,7 +316,13 @@ func RunServiceSource(ctx context.Context, client kubernetes.Interface, params R
 	}
 	svc, err := kube.CreateService(ctx, client, svcParams)
 	if err != nil {
-		return nil, fmt.Errorf("create service: %w", err)
+		return nil, serr.KubeOpError{
+			Op:        "create",
+			Resource:  "Service",
+			Name:      params.ServiceName,
+			Namespace: params.Namespace,
+			Err:       err,
+		}
 	}
 	return svc, nil
 }
@@ -276,35 +330,59 @@ func RunServiceSource(ctx context.Context, client kubernetes.Interface, params R
 // CleanupSource deletes the workload and its associated source ConfigMap created by RunSource.
 func CleanupSource(ctx context.Context, client kubernetes.Interface, namespace, jobName string) error {
 	if namespace == "" {
-		return errors.New("namespace is required")
+		return serr.ValidationError{Field: "namespace", Reason: "required"}
 	}
 	if jobName == "" {
-		return errors.New("job name is required")
+		return serr.ValidationError{Field: "job name", Reason: "required"}
 	}
 
 	// Try to delete a job first, if that doesn't exist, try to delete a CronJob with the same name
 	if err := kube.DeleteJob(ctx, client, namespace, jobName); err != nil {
 		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("delete job: %w", err)
+			return serr.KubeOpError{
+				Op:        "delete",
+				Resource:  "Job",
+				Name:      jobName,
+				Namespace: namespace,
+				Err:       err,
+			}
 		}
 	}
 
 	// Also try deleting a CronJob with this name (for cron workloads).
 	if err := kube.DeleteCronJob(ctx, client, namespace, jobName); err != nil {
 		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("delete cronjob: %w", err)
+			return serr.KubeOpError{
+				Op:        "delete",
+				Resource:  "CronJob",
+				Name:      jobName,
+				Namespace: namespace,
+				Err:       err,
+			}
 		}
 	}
 
 	// Also try deleting a Deployment and Service with this name (for service workloads).
 	if err := kube.DeleteDeployment(ctx, client, namespace, jobName); err != nil {
 		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("delete deployment: %w", err)
+			return serr.KubeOpError{
+				Op:        "delete",
+				Resource:  "Deployment",
+				Name:      jobName,
+				Namespace: namespace,
+				Err:       err,
+			}
 		}
 	}
 	if err := kube.DeleteService(ctx, client, namespace, jobName); err != nil {
 		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("delete service: %w", err)
+			return serr.KubeOpError{
+				Op:        "delete",
+				Resource:  "Service",
+				Name:      jobName,
+				Namespace: namespace,
+				Err:       err,
+			}
 		}
 	}
 
@@ -312,7 +390,13 @@ func CleanupSource(ctx context.Context, client kubernetes.Interface, namespace, 
 	if err := kube.DeleteConfigMap(ctx, client, namespace, configMapName); err != nil {
 		// if the configmap was already deleted, we don't need to return an error
 		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("delete configmap %q: %w", configMapName, err)
+			return serr.KubeOpError{
+				Op:        "delete",
+				Resource:  "ConfigMap",
+				Name:      configMapName,
+				Namespace: namespace,
+				Err:       err,
+			}
 		}
 	}
 
