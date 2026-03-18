@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	serr "serverless-cli/internal/errors"
 	"serverless-cli/pkg/kube"
 	"serverless-cli/pkg/runner"
 	"serverless-cli/pkg/utils"
@@ -48,7 +49,11 @@ func runOneOff(cmd *cobra.Command, args []string) error {
 
 	client, err := kube.NewClientSet()
 	if err != nil {
-		return fmt.Errorf("create kubernetes client: %w", err)
+		return serr.KubeOpError{
+			Op:       "create",
+			Resource: "kubernetes client",
+			Err:      err,
+		}
 	}
 
 	entrypoint := oneOffEntrypoint
@@ -91,7 +96,13 @@ func runOneOff(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Job %q created in namespace %q. Streaming logs...\n", jobName, namespace)
 	jobLogWriter := utils.NewJobLogsWriter(os.Stdout)
 	if err := kube.StreamJobLogs(ctx, client, namespace, jobName, jobLogWriter); err != nil {
-		return fmt.Errorf("stream job logs: %w", err)
+		return serr.KubeOpError{
+			Op:        "stream",
+			Resource:  "Job logs",
+			Name:      jobName,
+			Namespace: namespace,
+			Err:       err,
+		}
 	}
 	jobLogWriter.Reset()
 	return nil

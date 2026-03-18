@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	serr "serverless-cli/internal/errors"
 	"serverless-cli/pkg/kube"
 	"serverless-cli/pkg/runner"
 )
@@ -29,7 +30,11 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 	client, err := kube.NewClientSet()
 	if err != nil {
-		return fmt.Errorf("create kubernetes client: %w", err)
+		return serr.KubeOpError{
+			Op:       "create",
+			Resource: "kubernetes client",
+			Err:      err,
+		}
 	}
 
 	if err := runner.CleanupSource(ctx, client, namespace, workloadName); err != nil {
