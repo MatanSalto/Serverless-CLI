@@ -2,7 +2,6 @@ package kube
 
 import (
 	"context"
-	"errors"
 	"io"
 	"time"
 
@@ -11,6 +10,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
+
+	serr "serverless-cli/internal/errors"
 )
 
 // Job represents a Kubernetes Job.
@@ -41,13 +42,13 @@ type JobParams struct {
 // CreateJob creates and submits a Job to the cluster.
 func CreateJob(ctx context.Context, client kubernetes.Interface, jobParams JobParams) (*batchv1.Job, error) {
 	if jobParams.Namespace == "" {
-		return nil, errors.New("namespace is required")
+		return nil, serr.ValidationError{Field: "namespace", Reason: "required"}
 	}
 	if jobParams.Name == "" {
-		return nil, errors.New("name is required")
+		return nil, serr.ValidationError{Field: "name", Reason: "required"}
 	}
 	if jobParams.Image == "" {
-		return nil, errors.New("image is required")
+		return nil, serr.ValidationError{Field: "image", Reason: "required"}
 	}
 
 	container := corev1.Container{
