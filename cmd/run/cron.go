@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	serr "serverless-cli/internal/errors"
 	"serverless-cli/pkg/kube"
 	"serverless-cli/pkg/runner"
 )
@@ -41,7 +42,7 @@ func runCron(cmd *cobra.Command, args []string) error {
 	}
 
 	if cronSchedule == "" {
-		return fmt.Errorf("schedule is required (use --schedule)")
+		return serr.ValidationError{Field: "schedule", Reason: "required"}
 	}
 
 	namespace, err := cmd.Root().PersistentFlags().GetString("namespace")
@@ -51,7 +52,11 @@ func runCron(cmd *cobra.Command, args []string) error {
 
 	client, err := kube.NewClientSet()
 	if err != nil {
-		return fmt.Errorf("create kubernetes client: %w", err)
+		return serr.KubeOpError{
+			Op:       "create",
+			Resource: "kubernetes client",
+			Err:      err,
+		}
 	}
 
 	entrypoint := cronEntrypoint

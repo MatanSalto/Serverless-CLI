@@ -2,12 +2,13 @@ package kube
 
 import (
 	"context"
-	"errors"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	serr "serverless-cli/internal/errors"
 )
 
 // DeploymentParams holds parameters for creating a Deployment (long-running service workload).
@@ -30,13 +31,13 @@ type DeploymentParams struct {
 // CreateDeployment creates a Deployment in the cluster (e.g. for a service workload).
 func CreateDeployment(ctx context.Context, client kubernetes.Interface, params DeploymentParams) (*appsv1.Deployment, error) {
 	if params.Namespace == "" {
-		return nil, errors.New("namespace is required")
+		return nil, serr.ValidationError{Field: "namespace", Reason: "required"}
 	}
 	if params.Name == "" {
-		return nil, errors.New("name is required")
+		return nil, serr.ValidationError{Field: "name", Reason: "required"}
 	}
 	if params.Image == "" {
-		return nil, errors.New("image is required")
+		return nil, serr.ValidationError{Field: "image", Reason: "required"}
 	}
 
 	appLabel := params.PodLabelAppName

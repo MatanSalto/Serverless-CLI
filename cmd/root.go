@@ -12,8 +12,7 @@ import (
 )
 
 var (
-	kubeconfig string
-	namespace  string
+	namespace string
 )
 
 var rootCmd = &cobra.Command{
@@ -30,7 +29,6 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig file (if not provided, the default is $KUBECONFIG)")
 	rootCmd.PersistentFlags().StringVar(&namespace, "namespace", "serverless-workloads", "The Kubernetes namespace to run workloads in")
 
 	rootCmd.AddCommand(run.RunCmd)

@@ -2,13 +2,14 @@ package kube
 
 import (
 	"context"
-	"errors"
 	"sort"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	serr "serverless-cli/internal/errors"
 )
 
 // CronJobParams holds parameters for creating a CronJob (same as JobParams plus Schedule).
@@ -29,16 +30,16 @@ type CronJobParams struct {
 // CreateCronJob creates a CronJob in the cluster that runs Jobs on the given schedule.
 func CreateCronJob(ctx context.Context, client kubernetes.Interface, params CronJobParams) (*batchv1.CronJob, error) {
 	if params.Namespace == "" {
-		return nil, errors.New("namespace is required")
+		return nil, serr.ValidationError{Field: "namespace", Reason: "required"}
 	}
 	if params.Name == "" {
-		return nil, errors.New("name is required")
+		return nil, serr.ValidationError{Field: "name", Reason: "required"}
 	}
 	if params.Schedule == "" {
-		return nil, errors.New("schedule is required")
+		return nil, serr.ValidationError{Field: "schedule", Reason: "required"}
 	}
 	if params.Image == "" {
-		return nil, errors.New("image is required")
+		return nil, serr.ValidationError{Field: "image", Reason: "required"}
 	}
 
 	container := corev1.Container{

@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	serr "serverless-cli/internal/errors"
 	"serverless-cli/pkg/kube"
 )
 
@@ -28,22 +29,41 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	client, err := kube.NewClientSet()
 	if err != nil {
-		return fmt.Errorf("create kubernetes client: %w", err)
+		return serr.KubeOpError{
+			Op:       "create",
+			Resource: "kubernetes client",
+			Err:      err,
+		}
 	}
 
 	jobList, err := kube.ListManagedJobs(ctx, client, namespace)
 	if err != nil {
-		return fmt.Errorf("list jobs: %w", err)
+		return serr.KubeOpError{
+			Op:        "list",
+			Resource:  "Jobs",
+			Namespace: namespace,
+			Err:       err,
+		}
 	}
 
 	cronJobList, err := kube.ListManagedCronJobs(ctx, client, namespace)
 	if err != nil {
-		return fmt.Errorf("list cronjobs: %w", err)
+		return serr.KubeOpError{
+			Op:        "list",
+			Resource:  "CronJobs",
+			Namespace: namespace,
+			Err:       err,
+		}
 	}
 
 	deployList, err := kube.ListManagedDeployments(ctx, client, namespace)
 	if err != nil {
-		return fmt.Errorf("list deployments: %w", err)
+		return serr.KubeOpError{
+			Op:        "list",
+			Resource:  "Deployments",
+			Namespace: namespace,
+			Err:       err,
+		}
 	}
 
 	if len(jobList.Items) == 0 && len(cronJobList.Items) == 0 && len(deployList.Items) == 0 {

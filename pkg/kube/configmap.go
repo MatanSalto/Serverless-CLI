@@ -2,11 +2,12 @@ package kube
 
 import (
 	"context"
-	"errors"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	serr "serverless-cli/internal/errors"
 )
 
 // ConfigMapParams holds parameters for creating a ConfigMap.
@@ -19,10 +20,10 @@ type ConfigMapParams struct {
 // CreateConfigMap creates a ConfigMap in the cluster.
 func CreateConfigMap(ctx context.Context, client kubernetes.Interface, params ConfigMapParams) (*corev1.ConfigMap, error) {
 	if params.Namespace == "" {
-		return nil, errors.New("namespace is required")
+		return nil, serr.ValidationError{Field: "namespace", Reason: "required"}
 	}
 	if params.Name == "" {
-		return nil, errors.New("name is required")
+		return nil, serr.ValidationError{Field: "name", Reason: "required"}
 	}
 
 	cm := &corev1.ConfigMap{

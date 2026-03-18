@@ -2,12 +2,13 @@ package kube
 
 import (
 	"context"
-	"errors"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
+
+	serr "serverless-cli/internal/errors"
 )
 
 // ServiceParams holds parameters for creating a Service that targets a Deployment's pods.
@@ -26,13 +27,13 @@ type ServiceParams struct {
 // CreateService creates a ClusterIP Service in the cluster targeting pods with the given selector.
 func CreateService(ctx context.Context, client kubernetes.Interface, params ServiceParams) (*corev1.Service, error) {
 	if params.Namespace == "" {
-		return nil, errors.New("namespace is required")
+		return nil, serr.ValidationError{Field: "namespace", Reason: "required"}
 	}
 	if params.Name == "" {
-		return nil, errors.New("name is required")
+		return nil, serr.ValidationError{Field: "name", Reason: "required"}
 	}
 	if params.Port <= 0 {
-		return nil, errors.New("port is required and must be positive")
+		return nil, serr.ValidationError{Field: "port", Reason: "must be positive"}
 	}
 	if params.Selector == nil {
 		params.Selector = make(map[string]string)

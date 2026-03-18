@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	serr "serverless-cli/internal/errors"
 	"serverless-cli/pkg/kube"
 	"serverless-cli/pkg/utils"
 )
@@ -34,7 +35,11 @@ func runLogs(cmd *cobra.Command, args []string) error {
 
 	client, err := kube.NewClientSet()
 	if err != nil {
-		return fmt.Errorf("create kubernetes client: %w", err)
+		return serr.KubeOpError{
+			Op:       "create",
+			Resource: "kubernetes client",
+			Err:      err,
+		}
 	}
 
 	jobLogWriter := utils.NewJobLogsWriter(os.Stdout)
@@ -43,43 +48,94 @@ func runLogs(cmd *cobra.Command, args []string) error {
 	// First, check if this is a Job.
 	if _, err := client.BatchV1().Jobs(namespace).Get(ctx, workloadName, metav1.GetOptions{}); err == nil {
 		if err := kube.StreamJobLogs(ctx, client, namespace, workloadName, jobLogWriter); err != nil {
-			return fmt.Errorf("stream logs: %w", err)
+			return serr.KubeOpError{
+				Op:        "stream",
+				Resource:  "Job logs",
+				Name:      workloadName,
+				Namespace: namespace,
+				Err:       err,
+			}
 		}
 		return nil
 		// Return error if the error is not "not found"
 	} else if !apierrors.IsNotFound(err) {
-		return fmt.Errorf("get job: %w", err)
+		return serr.KubeOpError{
+			Op:        "get",
+			Resource:  "Job",
+			Name:      workloadName,
+			Namespace: namespace,
+			Err:       err,
+		}
 	}
 
 	// If not a Job, check if it's a Deployment (service) and stream logs from one of its pods.
 	if _, err := client.AppsV1().Deployments(namespace).Get(ctx, workloadName, metav1.GetOptions{}); err == nil {
 		podName, err := kube.GetFirstRunningPodNameForDeployment(ctx, client, namespace, workloadName)
 		if err != nil {
-			return fmt.Errorf("get pod for deployment: %w", err)
+			return serr.KubeOpError{
+				Op:        "get",
+				Resource:  "Pod for Deployment",
+				Name:      workloadName,
+				Namespace: namespace,
+				Err:       err,
+			}
 		}
 		if podName == "" {
-			return fmt.Errorf("deployment %q has no running pods yet", workloadName)
+			return serr.StateError{
+				Resource:  "Deployment",
+				Name:      workloadName,
+				Namespace: namespace,
+				Reason:    "has no running pods yet",
+			}
 		}
 		if err := kube.StreamPodLogs(ctx, client, namespace, podName, jobLogWriter); err != nil {
-			return fmt.Errorf("stream logs: %w", err)
+			return serr.KubeOpError{
+				Op:        "stream",
+				Resource:  "Pod logs",
+				Name:      podName,
+				Namespace: namespace,
+				Err:       err,
+			}
 		}
 		return nil
 	} else if !apierrors.IsNotFound(err) {
-		return fmt.Errorf("get deployment: %w", err)
+		return serr.KubeOpError{
+			Op:        "get",
+			Resource:  "Deployment",
+			Name:      workloadName,
+			Namespace: namespace,
+			Err:       err,
+		}
 	}
 
 	// If not a Deployment, check if it's a CronJob and stream logs from its most recent Job.
 	cronJob, err := client.BatchV1().CronJobs(namespace).Get(ctx, workloadName, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return fmt.Errorf("workload %q not found as Job, CronJob, or Deployment in namespace %q", workloadName, namespace)
+			return serr.NotFoundError{
+				Resource:  "Workload",
+				Name:      workloadName,
+				Namespace: namespace,
+			}
 		}
-		return fmt.Errorf("get cronjob: %w", err)
+		return serr.KubeOpError{
+			Op:        "get",
+			Resource:  "CronJob",
+			Name:      workloadName,
+			Namespace: namespace,
+			Err:       err,
+		}
 	}
 
 	latestJobName, err := kube.GetLatestJobNameForCronJob(ctx, client, namespace, cronJob.Name)
 	if err != nil {
-		return fmt.Errorf("get latest job for cronjob: %w", err)
+		return serr.KubeOpError{
+			Op:        "get",
+			Resource:  "latest Job for CronJob",
+			Name:      cronJob.Name,
+			Namespace: namespace,
+			Err:       err,
+		}
 	}
 	if latestJobName == "" {
 		fmt.Printf("CronJob %q has not created any Jobs yet.\n", cronJob.Name)
@@ -88,14 +144,26 @@ func runLogs(cmd *cobra.Command, args []string) error {
 
 	job, err := client.BatchV1().Jobs(namespace).Get(ctx, latestJobName, metav1.GetOptions{})
 	if err != nil {
-		return fmt.Errorf("get latest job %q for cronjob %q: %w", latestJobName, cronJob.Name, err)
+		return serr.KubeOpError{
+			Op:        "get",
+			Resource:  "Job",
+			Name:      latestJobName,
+			Namespace: namespace,
+			Err:       err,
+		}
 	}
 
 	creationTime := job.CreationTimestamp.Time
 	fmt.Printf("Streaming logs for most recent Job %q created at %s (CronJob %q).\n", latestJobName, creationTime.Format(time.RFC3339), cronJob.Name)
 
 	if err := kube.StreamJobLogs(ctx, client, namespace, latestJobName, jobLogWriter); err != nil {
-		return fmt.Errorf("stream logs for latest job: %w", err)
+		return serr.KubeOpError{
+			Op:        "stream",
+			Resource:  "Job logs",
+			Name:      latestJobName,
+			Namespace: namespace,
+			Err:       err,
+		}
 	}
 	return nil
 }
