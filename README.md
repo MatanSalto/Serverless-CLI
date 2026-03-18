@@ -49,7 +49,6 @@ serverless-cli run --help
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--kubeconfig` | (none) | Path to kubeconfig file. If unset, uses `$KUBECONFIG` or `~/.kube/config`. |
 | `--namespace` | `serverless-workloads` | Kubernetes namespace for workloads. |
 
 Example:
@@ -198,7 +197,7 @@ serverless-cli delete slp-my-script-abc123
 .
 ├── main.go              # Entrypoint; calls cmd.Execute()
 ├── cmd/
-│   ├── root.go          # Root command, global flags (kubeconfig, namespace)
+│   ├── root.go          # Root command, global flags (namespace)
 │   ├── run/
 │   │   ├── run.go       # run command group
 │   │   ├── one-off.go   # run one-off
@@ -235,7 +234,7 @@ go test ./pkg/packager/...
 1. Create a new file under `cmd/` (or a subpackage like `cmd/list/`).
 2. Define a `cobra.Command` and implement `RunE`.
 3. Register it in `cmd/root.go` with `rootCmd.AddCommand(...)`.
-4. Use `cmd.Root().PersistentFlags().GetString("namespace")` (and optionally `kubeconfig`) for global settings.
+4. Use `cmd.Root().PersistentFlags().GetString("namespace")` for global settings.
 5. Use `kube.NewClientSet()` for cluster access (respects `KUBECONFIG` / default kubeconfig).
 
 ### Dependencies
